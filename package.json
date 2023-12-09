@@ -1,0 +1,47 @@
+{
+  "name": "alist-video-player",
+  "version": "1.0.0",
+  "private": false,
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --fix --ignore-path .gitignore"
+  },
+  "dependencies": {
+    "@types/path-browserify": "^1.0.2",
+    "artplayer": "^5.0.9",
+    "core-js": "^3.29.0",
+    "ebml": "^3.0.0",
+    "hls.js": "^1.4.12",
+    "idb": "^7.1.1",
+    "libass-wasm": "^4.1.0",
+    "path-browserify": "^1.0.1",
+    "pinia": "^2.0.0",
+    "vue": "^3.2.0",
+    "vue-router": "^4.0.0",
+    "vuetify": "^3.0.0"
+  },
+  "devDependencies": {
+    "@babel/types": "^7.21.4",
+    "@mdi/js": "^7.3.67",
+    "@types/connect-history-api-fallback": "^1.5.3",
+    "@types/ebml": "^3.0.5",
+    "@types/node": "^18.15.0",
+    "@vitejs/plugin-vue": "^4.0.0",
+    "@vue/eslint-config-typescript": "^11.0.0",
+    "connect-history-api-fallback": "^2.0.0",
+    "eslint": "^8.37.0",
+    "eslint-plugin-vue": "^9.3.0",
+    "sass": "^1.60.0",
+    "typescript": "^5.0.0",
+    "unplugin-fonts": "^1.0.3",
+    "vite": "^4.2.0",
+    "vite-plugin-pwa": "^0.17.0",
+    "vite-plugin-rewrite-all": "^1.0.2",
+    "vite-plugin-vuetify": "^1.0.0",
+    "vue-tsc": "^1.2.0",
+    "workbox-build": "^7.0.0",
+    "workbox-window": "^7.0.0"
+  }
+}
