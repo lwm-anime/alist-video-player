@@ -45,7 +45,7 @@
                 {{ folder.title }}
               </div>
               <div class="tips-text">
-                {{ folder.tips }}
+                文件夹
               </div>
             </v-list-item>
             <v-divider></v-divider>
@@ -76,11 +76,15 @@
                 {{ video.title }}
               </div>
               <div class="tips-text">
-                <template v-if="historyTimes[video.href]">
-                  上次观看至 {{ formatPlayDuration(historyTimes[video.href]) }}
+                <template v-if="!video.history">
+                  从未播放
+                </template>
+                <template v-else-if="video.history.current / video.history.duration > 0.9">
+                  已看完，{{ formatTimeDelta(Date.now() - video.history.last.getTime()) }}
                 </template>
                 <template v-else>
-                  从未播放
+                  看到 {{ formatPlayDuration(video.history.current) }}，{{ formatTimeDelta(Date.now() -
+                    video.history.last.getTime()) }}
                 </template>
               </div>
             </v-list-item>
@@ -88,27 +92,6 @@
         </v-list>
         <template v-if="!listView">
           <v-row no-gutters>
-            <!-- <v-col cols="3" v-for="folder in folders">
-              <v-tooltip :text="folder.title" location="top">
-                <template v-slot:activator="{ props }">
-                  <v-card v-bind="props" class="ma-2" max-width="344" :to="folder.href">
-                    <div class="video-card-image d-flex justify-center align-center">
-                      <v-avatar color="grey-lighten-1" size="70">
-                        <v-icon color="white" :icon="mdiFolder" size="50"></v-icon>
-                      </v-avatar>
-                    </div>
-
-                    <v-card-title class="pl-2 pb-0 pt-0">
-                      <span class="title">{{ folder.title }}</span>
-                    </v-card-title>
-
-                    <v-card-subtitle class="pl-2 pb-1">
-                      {{ folder.tips }}
-                    </v-card-subtitle>
-                  </v-card>
-                </template>
-              </v-tooltip>
-            </v-col> -->
             <v-col cols="6" md="4" lg="3" v-for="video in videoFiles">
               <v-tooltip :text="video.title" location="top">
                 <template v-slot:activator="{ props }">
@@ -133,11 +116,15 @@
                         {{ video.title }}
                       </div>
                       <div class="mt-1 tips-text">
-                        <template v-if="historyTimes[video.href]">
-                          上次观看至 {{ formatPlayDuration(historyTimes[video.href]) }}
+                        <template v-if="!video.history">
+                          从未播放
+                        </template>
+                        <template v-else-if="video.history.current / video.history.duration > 0.9">
+                          已看完，{{ formatTimeDelta(Date.now() - video.history.last.getTime()) }}
                         </template>
                         <template v-else>
-                          从未播放
+                          看到 {{ formatPlayDuration(video.history.current) }}，{{ formatTimeDelta(Date.now() -
+                            video.history.last.getTime()) }}
                         </template>
                       </div>
                     </v-list-item>
@@ -160,8 +147,9 @@ import { useSettingsStore, useAppStore } from "@/store/app";
 import { storeToRefs } from "pinia";
 import { mdiFolder, mdiMovie, mdiViewListOutline, mdiGrid } from "@mdi/js";
 import * as api from "@/api";
-import { formatPlayDuration } from "@/utils";
 import { videoExts, ignoreFolderNamesLowerCase } from "@/globals";
+import * as history from "@/store/history";
+import { formatPlayDuration, formatTimeDelta } from "@/utils";
 
 const store = useSettingsStore();
 const appStore = useAppStore();
@@ -210,13 +198,6 @@ const alert = ref<any>({
   text: ""
 });
 
-const historyTimes = ref<any>({});
-function updateVideoHistory() {
-  const artPlayerSettings = localStorage.getItem("artplayer_settings");
-  const history = (artPlayerSettings && JSON.parse(artPlayerSettings)?.times) || {};
-  historyTimes.value = history;
-}
-
 async function getVideoList() {
   if ((!appStore.init) && currentPath.value !== pathLib.sep) {
     appStore.init = true;
@@ -251,20 +232,17 @@ async function getVideoList() {
     appStore.dirPath = currentPath.value;
     for (const item of content) {
       if (videoExts.includes(pathLib.extname(item.name).toLowerCase())) {
+        const href = pathLib.join(currentPath.value, item.name);
         videoFiles.value.push({
           thumb: item.thumb,
           title: item.name,
-          href: pathLib.join(currentPath.value, item.name),
-          // tips: "将来要实现的历史记录功能",
-          video: true
+          href: href,
+          history: await history.get(href)
         });
       } else if (item.is_dir && !ignoreFolderNamesLowerCase.includes(item.name.toLowerCase())) {
         folders.value.push({
-          thumb: "",
           title: item.name,
-          href: pathLib.join(currentPath.value, item.name, pathLib.sep),
-          tips: "文件夹",
-          folder: true
+          href: pathLib.join(currentPath.value, item.name, pathLib.sep)
         });
       }
     }
@@ -290,7 +268,6 @@ async function getVideoList() {
 
 onMounted(() => {
   getVideoList();
-  updateVideoHistory();
 })
 
 watch(currentPath, () => {
@@ -352,8 +329,3 @@ watch(currentPath, () => {
 }
 </style>
 
-<style>
-/* .video-items:visited .title-text {
-  color: purple;
-} */
-</style>

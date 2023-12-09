@@ -74,11 +74,17 @@
                     {{ video.title }}
                   </div>
                   <div class="tips-text">
-                    <template v-if="historyTimes[video.href]">
-                      上次观看至 {{ formatPlayDuration(historyTimes[video.href]) }}
+                    <template v-if="currentPath === video.href">
+                      正在播放
+                    </template>
+                    <template v-else-if="!video.history">
+                      从未播放
+                    </template>
+                    <template v-else-if="video.history.current / video.history.duration > 0.9">
+                      已看完
                     </template>
                     <template v-else>
-                      从未播放
+                      看到 {{ formatPlayDuration(video.history.current) }}
                     </template>
                   </div>
                 </v-list-item>
@@ -101,10 +107,11 @@ import Artplayer from 'artplayer';
 import * as idb from "idb";
 import { mdiMovie } from "@mdi/js";
 import playingIcon from "@/assets/playing.png";
-import { formatPlayDuration, parseAssFonts } from "@/utils";
+import { parseAssFonts, formatPlayDuration } from "@/utils";
 import { videoExts, defaultFontPath } from "@/globals";
 import { useSettingsStore, useAppStore } from "@/store/app";
 import { storeToRefs } from "pinia";
+import * as history from "@/store/history";
 
 // @ts-ignore
 import SubtitlesOctopus from "@/external/subtitles-octopus";
@@ -146,14 +153,21 @@ const breadItems = computed(() => {
   return temp;
 });
 
-const historyTimes = ref<any>({});
 let lastUpdateTs = -5001;
-function updateVideoHistory() {
+const videoListItemMap = new Map();
+async function updateVideoHistory() {
   const ts = performance.now();
-  if (ts - lastUpdateTs > 5000) {
-    const artPlayerSettings = localStorage.getItem("artplayer_settings");
-    const history = (artPlayerSettings && JSON.parse(artPlayerSettings)?.times) || {};
-    historyTimes.value = history;
+  if (playerInstance.value?.video && ts - lastUpdateTs > 1000) {
+    const videoHistory = {
+      current: playerInstance.value.video.currentTime,
+      duration: playerInstance.value.video.duration,
+      last: new Date()
+    };
+    await history.set(currentPath.value, videoHistory);
+    const listItem = videoListItemMap.get(currentPath.value);
+    if (listItem) {
+      listItem.history = videoHistory;
+    }
     lastUpdateTs = ts;
   }
 }
@@ -212,13 +226,29 @@ const fontsWarnings = ref<{
 const videoDetail = ref<any | null>(null);
 
 async function fileListInit() {
-  appStore.init = true;
-  if (currentDirFileListPath.value && currentDirFileListPath.value === pathLib.dirname(currentPath.value)) {
+  if (currentDirFileListPath.value === pathLib.dirname(currentPath.value)) {
     return;
   }
-  if (appStore.dirFilesList && appStore.dirPath === pathLib.dirname(currentPath.value)) {
+  try {
+    videoListLoading.value = true;
+    if (!appStore.init) {
+      const detailResp = await api.getPathDetails(currentPath.value);
+      if (detailResp?.data?.is_dir) {
+        router.push(pathLib.join(currentPath.value, pathLib.sep));
+        return;
+      } else {
+        videoDetail.value = detailResp?.data;
+      }
+      appStore.init = true;
+    }
     dirVideoFiles.value = [];
     dirSubtitleFiles.value = [];
+    if (!(appStore.dirFilesList && appStore.dirPath === pathLib.dirname(currentPath.value))) {
+      const resp = await api.getFilesList(pathLib.dirname(currentPath.value));
+      const contents = resp.data.content.sort((a: any, b: any) => (a.name > b.name ? 1 : -1));
+      appStore.dirFilesList = contents;
+      appStore.dirPath = pathLib.dirname(currentPath.value);
+    }
     for (const item of appStore.dirFilesList) {
       if (item.is_dir) {
         continue;
@@ -226,46 +256,14 @@ async function fileListInit() {
       const lowerCaseName = item.name.toLowerCase();
       if (videoExts.includes(pathLib.extname(lowerCaseName))) {
         const videoPath = pathLib.join(pathLib.dirname(currentPath.value), item.name);
-        dirVideoFiles.value.push({
+        const listItem = {
           thumb: item.thumb,
           title: item.name,
-          href: videoPath
-        });
-      } else if (pathLib.extname(lowerCaseName).toLowerCase() === ".ass") {
-        dirSubtitleFiles.value.push(item.name);
-      }
-    }
-    currentDirFileListPath.value = appStore.dirPath;
-    videoListLoading.value = false;
-    return;
-  }
-  try {
-    const detailResp = await api.getPathDetails(currentPath.value);
-    if (detailResp?.data?.is_dir) {
-      router.push(pathLib.join(currentPath.value, pathLib.sep));
-      return;
-    } else {
-      videoDetail.value = detailResp?.data;
-    }
-    videoListLoading.value = true;
-    dirVideoFiles.value = [];
-    dirSubtitleFiles.value = [];
-    const resp = await api.getFilesList(pathLib.dirname(currentPath.value));
-    const contents = resp.data.content.sort((a: any, b: any) => (a.name > b.name ? 1 : -1));
-    appStore.dirFilesList = contents;
-    appStore.dirPath = pathLib.dirname(currentPath.value);
-    for (const item of contents) {
-      if (item.is_dir) {
-        continue;
-      }
-      const lowerCaseName = item.name.toLowerCase();
-      if (videoExts.includes(pathLib.extname(lowerCaseName))) {
-        const videoPath = pathLib.join(pathLib.dirname(currentPath.value), item.name);
-        dirVideoFiles.value.push({
-          thumb: item.thumb,
-          title: item.name,
-          href: videoPath
-        });
+          href: videoPath,
+          history: await history.get(videoPath)
+        };
+        dirVideoFiles.value.push(listItem);
+        videoListItemMap.set(videoPath, listItem);
       } else if (pathLib.extname(lowerCaseName).toLowerCase() === ".ass") {
         dirSubtitleFiles.value.push(item.name);
       }
@@ -444,6 +442,16 @@ async function videoInit() {
       alert.value.title = "后台服务加载失败";
       alert.value.text = "检测到 Service Worker 后台服务未正常运行，可能会影响视频播放，建议刷新页面重试。"
     }
+
+    const videoHistory = await history.get(currentPath.value);
+    const artPlayerSettingsJSON = localStorage.getItem("artplayer_settings");
+    const artPlayerSettings = artPlayerSettingsJSON ? JSON.parse(artPlayerSettingsJSON) : {};
+    const artPlayerTimes = {};
+    if (videoHistory) {
+      artPlayerTimes[currentPath.value] = videoHistory.current;
+    }
+    artPlayerSettings.times = artPlayerTimes;
+    localStorage.setItem("artplayer_settings", JSON.stringify(artPlayerSettings));
 
     playerInstance.value = new Artplayer({
       container: playerDomRef.value,
@@ -750,3 +758,4 @@ canvas {
   height: 100%;
 }
 </style>
+@/store/history

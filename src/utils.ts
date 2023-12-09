@@ -1,7 +1,20 @@
+export function timeZeroPadding(num: number) {
+  if (num < 10) {
+    return `0${num}`;
+  } else {
+    return num.toString();
+  }
+}
+
 export function formatPlayDuration(duration: number) {
-  const minute = Math.floor(duration / 60);
-  const seconds = Math.floor(duration % 60);
-  return `${minute < 10 ? '0' : ''}${minute}:${seconds < 10 ? '0' : ''}${seconds}`;
+  const hour = Math.floor(duration / (60 * 60));
+  const minute = Math.floor(duration / 60) % 60;
+  const second = Math.floor(duration) % 60;
+  if (hour > 0) {
+    return `${timeZeroPadding(hour)}:${timeZeroPadding(minute)}:${timeZeroPadding(second)}`;
+  } else {
+    return `${timeZeroPadding(minute)}:${timeZeroPadding(second)}`;
+  }
 }
 
 export function split(str: string, sep: string, limit: number) {
@@ -114,67 +127,6 @@ export function parseAssFonts(data: string): string[] {
   return Array.from(dialogueFonts);
 }
 
-// function parseAssFonts(data: string): string[] {
-//   const lines = data.split("\n").map(item => item.trim())
-//   const fonts: any = {};
-//   const usableFonts: any[] = [];
-//   let stylesStart = false;
-//   let eventsStart = false;
-//   let fontIndex = null;
-//   let nameIndex = null;
-//   let styleIndex = null;
-//   let textIndex = null;
-//   for (const text of lines) {
-//     if (text.toLowerCase().includes("styles")) {
-//       stylesStart = true
-//     } else if (text.toLowerCase().includes("events")) {
-//       eventsStart = true;
-//     }
-//     if (stylesStart) {
-//       if (text.startsWith("Format")) {
-//         const formats = text.slice(7).split(",").map(item => item.trim().toLowerCase())
-//         fontIndex = formats.indexOf("fontname");
-//         nameIndex = formats.indexOf("name")
-//       } else if (nameIndex !== null && fontIndex !== null && text.startsWith("Style")) {
-//         const items = text.slice(6).split(",").map(item => item.trim());
-//         fonts[items[nameIndex]] = items[fontIndex].replace("@", "");
-//       } else if (!text) {
-//         stylesStart = false;
-//       }
-//     } else if (eventsStart) {
-//       if (text.startsWith("Format")) {
-//         const formats = text.slice(7).split(",").map(item => item.trim().toLowerCase())
-//         styleIndex = formats.indexOf("style");
-//         textIndex = formats.indexOf("text");
-
-//       } else if (styleIndex !== null && textIndex !== null && text.startsWith("Dialogue")) {
-//         const items = text.slice(9).split(",").map(item => item.trim())
-//         const style = items[styleIndex].replace("*", "");
-//         const dialogueFonts = [fonts[style]];
-//         const dialogueText = items.slice(textIndex).join("");
-//         const regex = /{.*?\\fn([^\\}]+).*}/gm;
-//         let m;
-//         while ((m = regex.exec(dialogueText)) !== null) {
-//           // This is necessary to avoid infinite loops with zero-width matches
-//           if (m.index === regex.lastIndex) {
-//             regex.lastIndex++;
-//           }
-
-//           // The result can be accessed through the `m`-variable.
-//           dialogueFonts.push(m[1]);
-//         }
-//         debugger;
-//         for (const font of dialogueFonts) {
-//           if (font && !usableFonts.includes(font.replace("@", ""))) {
-//             usableFonts.push(font.replace("@", ""));
-//           }
-//         }
-//       }
-//     }
-//   }
-//   return usableFonts;
-// }
-
 export function escapeHtml(unsafe: string): string {
   return unsafe
     .replace(/&/g, "&amp;")
@@ -188,4 +140,32 @@ export function sleep(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+export function formatTimeDelta(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  const years = Math.floor(seconds / (60 * 60 * 24 * 365));
+  if (years) {
+    return `${years} 年前`;
+  }
+  const months = Math.floor(seconds / (60 * 60 * 24 * 30));
+  if (months) {
+    return `${months} 月前`;
+  }
+  const days = Math.floor(seconds / (60 * 60 * 24));
+  if (days) {
+    return `${days} 天前`;
+  }
+  const hours = Math.floor(seconds / (60 * 60));
+  if (hours) {
+    return `${hours} 小时前`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes) {
+    return `${minutes} 分钟前`;
+  }
+  if (seconds) {
+    return `${seconds} 秒前`;
+  }
+  return "刚刚";
 }
