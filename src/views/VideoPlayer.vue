@@ -112,6 +112,7 @@ import { videoExts, defaultFontPath } from "@/globals";
 import { useSettingsStore, useAppStore } from "@/store/app";
 import { storeToRefs } from "pinia";
 import * as history from "@/store/history";
+import * as fontsCacheStore from "@/store/fonts";
 
 // @ts-ignore
 import SubtitlesOctopus from "@/external/subtitles-octopus";
@@ -214,7 +215,6 @@ const initCompleted = ref(false);
 const dirVideoFiles = ref<any[]>([]);
 const dirSubtitleFiles = ref<string[]>([]);
 const videoListLoading = ref(true);
-// const currentDirPath = computed(() => pathLib.dirname(currentPath.value));
 const currentDirFileListPath = ref<string | null>(null);
 const fontsWarnings = ref<{
   error: string[],
@@ -288,14 +288,14 @@ async function fileListInit() {
   }
 }
 
-async function fetchCacheFontFile(db: idb.IDBPDatabase, fontPath: string, fontName: string) {
+async function fetchCacheFontFile(fontPath: string, fontName: string) {
   try {
     const fontFileBaseName = pathLib.basename(fontPath, pathLib.extname(fontPath));
-    let blob = await db.get("fonts", fontFileBaseName);
+    let blob = await fontsCacheStore.getCacheFontBlob(fontFileBaseName);
     if (!blob) {
       const resp = await api.getFileContentResponse(fontPath);
       blob = await resp.blob();
-      await db.put("fonts", blob, fontFileBaseName);
+      await fontsCacheStore.setCacheFontBlob(fontFileBaseName, blob);
     }
     return URL.createObjectURL(blob);
   } catch (err) {
@@ -307,36 +307,66 @@ async function fetchCacheFontFile(db: idb.IDBPDatabase, fontPath: string, fontNa
   }
 }
 
+async function apiGetGlobalFontsIndexWithWarnings() {
+  try {
+    return await api.getGlobalFontsIndex();
+  } catch (err) {
+    console.warn(err);
+    alert.value.type = "warning";
+    alert.value.visible = true;
+    alert.value.title = "获取最新字体索引失败";
+    if (err instanceof api.CustomError) {
+      alert.value.text = err.message;
+    } else if (err instanceof api.APIError) {
+      alert.value.text = (err.path ? `加载 ${err.path} 失败：` : "") + `${err.apiMessage}`;
+    } else if (err instanceof Error) {
+      alert.value.text = `${err.name}: ${err.message}`;
+    } else {
+      alert.value.text = `未知错误 (${String(err)})`;
+    }
+    return null;
+  }
+}
+
 async function fetchFonts(fonts: string[]) {
   videoLoading.value.text = "获取字体索引";
-  const fontsIndex = await api.getGlobalFontsIndex();
+  let fontsIndex = (await fontsCacheStore.getFontsIndexCache())?.content || {};
+  let latestFontsIndex = false;
+  const defaultFontName = pathLib.basename(defaultFontPath, pathLib.extname(defaultFontPath));
   const foundFontsNames = [
-    pathLib.basename(defaultFontPath, pathLib.extname(defaultFontPath))
+    defaultFontName
   ];
   const foundFontsPaths = [
     defaultFontPath
   ];
+  const foundFontsBaseNameSet = new Set();
+  foundFontsBaseNameSet.add(defaultFontName);
   for (const fontName of fonts) {
-    const fontPath = fontsIndex[fontName.toLowerCase()];
+    let fontPath = fontsIndex[fontName.toLowerCase()];
+    if ((!fontPath) && (!latestFontsIndex)) {
+      fontsIndex = await apiGetGlobalFontsIndexWithWarnings() || fontsIndex;
+      latestFontsIndex = true;
+      fontPath = fontsIndex[fontName.toLowerCase()];
+    }
     if (fontPath) {
-      foundFontsPaths.push(pathLib.join(api.globalFontsBase, fontPath));
-      foundFontsNames.push(fontName);
+      const fontBaseFileName = pathLib.basename(fontPath, pathLib.extname(fontPath));
+      const fullFontPath = pathLib.join(api.globalFontsBase, fontPath);
+      if (!foundFontsBaseNameSet.has(fontBaseFileName)) {
+        foundFontsPaths.push(fullFontPath);
+        foundFontsNames.push(fontName);
+        foundFontsBaseNameSet.add(fontBaseFileName);
+      }
     } else {
       fontsWarnings.value.notFound.push(fontName);
     }
   }
-  const db = await idb.openDB("fonts", 1, {
-    upgrade(db) {
-      db.createObjectStore('fonts');
-    },
-  });
   videoLoading.value.text = `加载字幕所需字体，共 ${foundFontsPaths.length} 个`;
   videoLoading.value.lodingFontsCount = foundFontsPaths.length;
   const promises: Promise<string | null>[] = [];
   for (const index in foundFontsPaths) {
     const fontPath = foundFontsPaths[index];
     const fontName = foundFontsNames[index];
-    promises.push(fetchCacheFontFile(db, fontPath, fontName));
+    promises.push(fetchCacheFontFile(fontPath, fontName));
   }
   const results = (await Promise.all(promises)).filter(blobUrl => blobUrl);
   if (results.length === 0) {
@@ -638,7 +668,6 @@ async function videoInit() {
 
 onMounted(() => {
   document.title = pathLib.basename(currentPath.value);
-  updateVideoHistory();
   videoInit();
 });
 
@@ -758,4 +787,3 @@ canvas {
   height: 100%;
 }
 </style>
-@/store/history

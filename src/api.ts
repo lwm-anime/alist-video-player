@@ -1,4 +1,5 @@
 import pathLib from "path-browserify";
+import { getFontsIndexCache, setFontsIndexCache } from "@/store/fonts";
 
 export const globalFontsBase = "/globalFonts"
 
@@ -110,9 +111,8 @@ export async function getGlobalFontsIndex() {
   try {
     const resp = await getPathDetails(pathLib.join(globalFontsBase, "fonts.json"));
     const modified = resp?.data?.modified && new Date(resp.data.modified);
-    const storage = localStorage.getItem("fontsIndex");
-    if (storage) {
-      const cache = JSON.parse(storage);
+    const cache = await getFontsIndexCache();
+    if (cache) {
       const localModified = new Date(cache.modified);
       if (modified <= localModified) {
         return cache.content;
@@ -120,7 +120,7 @@ export async function getGlobalFontsIndex() {
     }
     const fileResp = await getFileContentResponse(pathLib.join(globalFontsBase, "fonts.json"), resp.data.raw_url);
     const content = await fileResp.json();
-    localStorage.setItem("fontsIndex", JSON.stringify({ modified, content }));
+    await setFontsIndexCache(modified, content);
     return content;
   } catch (err) {
     if (err instanceof CustomError) {
