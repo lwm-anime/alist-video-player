@@ -466,7 +466,7 @@ async function videoInit() {
       });
     }
 
-    if (!defaultQuality!.url.startsWith("/@")) {
+    if (videoDetail.value.provider === "AliyundriveOpen" && !defaultQuality!.url.startsWith("/@")) {
       alert.value.type = "warning";
       alert.value.visible = true;
       alert.value.title = "后台服务加载失败";

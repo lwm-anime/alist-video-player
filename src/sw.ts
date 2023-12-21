@@ -62,7 +62,7 @@ async function handleAPIGetRequest(request: Request) {
   const filePath = reqContent.path;
   const resp = await fetch(new Request(request.url, { headers: request.headers, method: request.method, body: JSON.stringify(reqContent) }));
   const data = await resp.json();
-  if (videoExts.includes(pathLib.extname(filePath).toLowerCase())) {
+  if (data?.data?.provider === "AliyundriveOpen" && videoExts.includes(pathLib.extname(filePath).toLowerCase())) {
     const rawUrl = data?.data?.raw_url;
     if (rawUrl) {
       rawCache.set(filePath, rawUrl);
