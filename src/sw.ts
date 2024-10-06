@@ -24,10 +24,28 @@ function copyRequestInit(request: Request): RequestInit {
   };
 }
 
-function rawUrlExpired(url: string) {
+function getUrlExpiredTime(url: string) {
   const search = new URLSearchParams(url);
+  const ossExpires = search.get("x-oss-expires");
+  if (ossExpires) {
+    return parseInt(ossExpires);
+  }
+
+  const amzExpires = search.get("X-Amz-Expires");
+  if (amzExpires) {
+    const amzDate = search.get("X-Amz-Date");
+    if (amzDate) {
+      const expires = new Date(amzDate).getTime() / 1000 + parseInt(amzExpires);
+      return expires;
+    }
+  }
+
+  return null;
+}
+
+function rawUrlExpired(url: string) {
   const currentTs = Date.now() / 1000;
-  const expiredTs = parseInt(search.get("x-oss-expires")!) || 0;
+  const expiredTs = getUrlExpiredTime(url) ?? 0;
   return (expiredTs - currentTs) < 60;
 }
 
@@ -62,9 +80,9 @@ async function handleAPIGetRequest(request: Request) {
   const filePath = reqContent.path;
   const resp = await fetch(new Request(request.url, { headers: request.headers, method: request.method, body: JSON.stringify(reqContent) }));
   const data = await resp.json();
-  if (data?.data?.provider === "AliyundriveOpen" && videoExts.includes(pathLib.extname(filePath).toLowerCase())) {
+  if (videoExts.includes(pathLib.extname(filePath).toLowerCase())) {
     const rawUrl = data?.data?.raw_url;
-    if (rawUrl) {
+    if (rawUrl && getUrlExpiredTime(rawUrl) !== null) {
       rawCache.set(filePath, rawUrl);
       // @ts-ignore
       data.data.raw_url = pathLib.join("/@raw", filePath);
